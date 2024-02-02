@@ -11,18 +11,24 @@ import (
 type Parser struct {
 	l *lexer.Lexer
 
+	errors []string
+
 	curToken  token.Token
 	peekToken token.Token
 }
 
 func New(l *lexer.Lexer) *Parser {
-	p := &Parser{l: l}
+	p := &Parser{l: l, errors: []string{}}
 
 	// read two tokens so we have a starting point
 	p.nextToken()
 	p.nextToken()
 
 	return p
+}
+
+func (p *Parser) Errors() []string {
+	return p.errors
 }
 
 func (p *Parser) nextToken() {
@@ -35,7 +41,7 @@ func (p *Parser) ParseProgram() *ast.Program {
 
 	program.Statements = []ast.Statement{}
 
-	for p.curToken.Type != token.EOF {
+	for !p.curTokenIs(token.EOF) {
 		stmt := p.parseStatement()
 
 		if stmt != nil {
@@ -60,17 +66,20 @@ func (p *Parser) parseStatement() ast.Statement {
 func (p *Parser) parseLetStatement() *ast.LetStatement {
 	stmt := &ast.LetStatement{Token: p.curToken}
 
+	// expect an identifier immediately after 'let' keyword
 	if !p.expectPeek(token.IDENT) {
 		return nil
 	}
 
 	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
-	fmt.Printf("\nstatement: \n%+v", stmt)
+	// expect an assignment operator immediately after identifier
 	if !p.expectPeek(token.ASSIGN) {
 		return nil
 	}
 
+	// skip over everything else (the expression) until hitting a semicolon
+	// this will be replaced once able to actually parse the expression
 	for !p.curTokenIs(token.SEMICOLON) {
 		p.nextToken()
 	}
@@ -91,6 +100,13 @@ func (p *Parser) expectPeek(t token.TokenType) bool {
 		p.nextToken()
 		return true
 	} else {
+		p.peekError(t)
 		return false
 	}
+}
+
+func (p *Parser) peekError(t token.TokenType) {
+	msg := fmt.Sprintf("expected next token to be %s, got %s", t, p.peekToken.Type)
+
+	p.errors = append(p.errors, msg)
 }
